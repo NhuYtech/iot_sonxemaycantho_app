@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import '../widgets/sensor_card.dart';
 import '../widgets/warning_banner.dart';
 import '../widgets/switch_tile.dart';
+import '../services/firebase_realtime.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -11,19 +13,83 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  // Mock data - sẽ được thay thế bằng dữ liệu từ Firebase
-  double gasLevel = 150.0; // ppm
-  bool hasFlame = false;
-  double temperature = 28.5; // °C
-  double humidity = 65.0; // %
-  bool isEsp32Online = true;
+  final FirebaseRealtimeService _firebaseService = FirebaseRealtimeService();
 
+  StreamSubscription? _sensorSubscription;
+  StreamSubscription? _controlSubscription;
+  StreamSubscription? _settingsSubscription;
+
+  // Sensor data
+  double gasLevel = 0.0;
+  bool hasFlame = false;
+  double temperature = 0.0;
+  double humidity = 0.0;
+  bool isEsp32Online = false;
+
+  // Control data
   bool relay1State = false;
   bool relay2State = false;
-  bool alarmMuted = false;
+  bool buzzerState = false;
 
-  // Ngưỡng cảnh báo
-  final double gasThreshold = 200.0;
+  // Settings
+  double gasThreshold = 200.0;
+
+  bool alarmMuted = false;
+  DateTime? lastUpdateTime;
+
+  @override
+  void initState() {
+    super.initState();
+    _listenToFirebase();
+  }
+
+  @override
+  void dispose() {
+    _sensorSubscription?.cancel();
+    _controlSubscription?.cancel();
+    _settingsSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _listenToFirebase() {
+    // Listen to sensor data
+    _sensorSubscription = _firebaseService.getSensorStream().listen((data) {
+      if (mounted) {
+        setState(() {
+          gasLevel = (data['mq2'] ?? 0).toDouble();
+          hasFlame = (data['fire'] ?? 0) == 1;
+          temperature = (data['temp'] ?? 0).toDouble();
+          humidity = (data['humi'] ?? 0).toDouble();
+          lastUpdateTime = DateTime.now();
+
+          // Check if device is online (data updated recently)
+          isEsp32Online = true;
+        });
+      }
+    });
+
+    // Listen to control data
+    _controlSubscription = _firebaseService.getControlStream().listen((data) {
+      if (mounted) {
+        setState(() {
+          relay1State = (data['relay1'] ?? 0) == 1;
+          relay2State = (data['relay2'] ?? 0) == 1;
+          buzzerState = (data['buzzer'] ?? 0) == 1;
+        });
+      }
+    });
+
+    // Listen to settings
+    _settingsSubscription = _firebaseService.getSettingsStream().listen((data) {
+      if (mounted) {
+        setState(() {
+          if (data['behavior'] != null) {
+            gasThreshold = (data['behavior']['threshold'] ?? 200).toDouble();
+          }
+        });
+      }
+    });
+  }
 
   bool get hasWarning {
     return gasLevel > gasThreshold || hasFlame || !isEsp32Online;
@@ -45,15 +111,50 @@ class _HomePageState extends State<HomePage> {
 
   Color getGasColor() {
     if (gasLevel < 100) return Colors.green;
-    if (gasLevel < 200) return Colors.orange;
+    if (gasLevel < gasThreshold) return Colors.orange;
     return Colors.red;
+  }
+
+  Future<void> _toggleRelay(int relayNumber, bool newState) async {
+    try {
+      await _firebaseService.updateControl(
+        'relay$relayNumber',
+        newState ? 1 : 0,
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Đã ${newState ? 'bật' : 'tắt'} Relay $relayNumber'),
+          duration: const Duration(seconds: 1),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Lỗi: $e')));
+    }
+  }
+
+  Future<void> _toggleBuzzer() async {
+    try {
+      await _firebaseService.updateControl('buzzer', 0);
+      setState(() {
+        alarmMuted = true;
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Đã tắt còi cảnh báo')));
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Lỗi: $e')));
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Dashboard'),
+        title: const Text('Trang chủ'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
           Padding(
@@ -173,10 +274,7 @@ class _HomePageState extends State<HomePage> {
                             value: relay1State,
                             icon: Icons.power,
                             onChanged: (value) {
-                              setState(() {
-                                relay1State = value;
-                              });
-                              // TODO: Send command to Firebase
+                              _toggleRelay(1, value);
                             },
                           ),
                           const Divider(height: 1),
@@ -186,10 +284,7 @@ class _HomePageState extends State<HomePage> {
                             value: relay2State,
                             icon: Icons.power_settings_new,
                             onChanged: (value) {
-                              setState(() {
-                                relay2State = value;
-                              });
-                              // TODO: Send command to Firebase
+                              _toggleRelay(2, value);
                             },
                           ),
                         ],
@@ -203,14 +298,7 @@ class _HomePageState extends State<HomePage> {
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(
-                          onPressed: alarmMuted
-                              ? null
-                              : () {
-                                  setState(() {
-                                    alarmMuted = true;
-                                  });
-                                  // TODO: Send mute command to Firebase
-                                },
+                          onPressed: alarmMuted ? null : _toggleBuzzer,
                           icon: Icon(
                             alarmMuted ? Icons.volume_off : Icons.volume_up,
                           ),

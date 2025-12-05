@@ -1,0 +1,91 @@
+{
+  "project_info": {
+    "project_number": "501406586454",
+    "firebase_url": "https://sonxemay-cantho-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "sonxemay-cantho",
+    "storage_bucket": "sonxemay-cantho.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:501406586454:android:ce7b67194232c15a398df7",
+        "android_client_info": {
+          "package_name": "com.example.iot_sonxemaycantho_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "501406586454-3dtr99l608j9p63jjkclipab1kpcngk9.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA0CG6EY9KALaZyfrBZrRyMUBRr2IvyKwc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "501406586454-3dtr99l608j9p63jjkclipab1kpcngk9.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "501406586454-pfhud5baasv3oil6qqe5hukb2vg84kmp.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.sonxemaycantho"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:501406586454:android:7b8602d5e3a900ce398df7",
+        "android_client_info": {
+          "package_name": "com.example.sonxemaycantho"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "501406586454-hitlufrpg3ecb61184g56g2l7vbokarr.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.sonxemaycantho",
+            "certificate_hash": "b41084b34081fcd602a8e367a99192d1a1535eb0"
+          }
+        },
+        {
+          "client_id": "501406586454-3dtr99l608j9p63jjkclipab1kpcngk9.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA0CG6EY9KALaZyfrBZrRyMUBRr2IvyKwc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "501406586454-3dtr99l608j9p63jjkclipab1kpcngk9.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "501406586454-pfhud5baasv3oil6qqe5hukb2vg84kmp.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.sonxemaycantho"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

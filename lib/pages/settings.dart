@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../widgets/switch_tile.dart';
+import 'dart:async';
+import '../services/firebase_realtime.dart';
 
 enum SystemMode { auto, manual }
 
@@ -11,45 +12,123 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  // Mock data - sẽ được load từ Firebase
+  final FirebaseRealtimeService _firebaseService = FirebaseRealtimeService();
+
+  StreamSubscription? _settingsSubscription;
+  StreamSubscription? _wifiSubscription;
+
   String deviceId = 'ESP32-001';
-  bool isDeviceOnline = true;
-  bool isWifiConnected = true;
-  String wifiSsid = 'IoT_Network';
-  int wifiSignalStrength = -45; // dBm
+  bool isDeviceOnline = false;
+  bool isWifiConnected = false;
+  String wifiSsid = '';
+  DateTime? wifiTimestamp;
 
   SystemMode systemMode = SystemMode.auto;
-  double gasThreshold = 200.0;
-  int dataInterval = 2; // seconds
+  double gasThreshold = 1000.0;
+  int dataInterval = 5;
 
-  // Sensors
+  // Sensors - giả định có tất cả
   bool hasTempSensor = true;
   bool hasHumiditySensor = true;
   bool hasGasSensor = true;
   bool hasFlameSensor = true;
 
+  @override
+  void initState() {
+    super.initState();
+    _listenToFirebase();
+  }
+
+  @override
+  void dispose() {
+    _settingsSubscription?.cancel();
+    _wifiSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _listenToFirebase() {
+    // Listen to settings
+    _settingsSubscription = _firebaseService.getSettingsStream().listen((data) {
+      if (mounted) {
+        setState(() {
+          if (data['behavior'] != null) {
+            final behavior = data['behavior'];
+            systemMode = (behavior['mode'] ?? 0) == 0
+                ? SystemMode.auto
+                : SystemMode.manual;
+            gasThreshold = (behavior['threshold'] ?? 1000).toDouble().clamp(
+              0,
+              5000,
+            );
+
+            // Check for buzzer/relay enable states
+          }
+
+          dataInterval = data['dataInterval'] ?? 5;
+
+          // Check logsSettings
+          if (data['logsSettings'] != null) {}
+        });
+      }
+    });
+
+    // Listen to WiFi config
+    _wifiSubscription = _firebaseService.getWifiConfigStream().listen((data) {
+      if (mounted) {
+        setState(() {
+          wifiSsid = data['ssid'] ?? '';
+          isWifiConnected =
+              data['ssid'] != null && data['ssid'].toString().isNotEmpty;
+
+          if (data['timestamp'] != null) {
+            wifiTimestamp = DateTime.fromMillisecondsSinceEpoch(
+              int.tryParse(data['timestamp'].toString()) ?? 0,
+            );
+            // Consider online if updated within last 30 seconds
+            isDeviceOnline =
+                DateTime.now().difference(wifiTimestamp!).inSeconds < 30;
+          }
+        });
+      }
+    });
+  }
+
   String get wifiStatus {
     if (!isWifiConnected) return 'Ngắt kết nối';
-    if (wifiSignalStrength > -50) return 'Tốt';
-    if (wifiSignalStrength > -70) return 'Trung bình';
-    return 'Yếu';
+    if (!isDeviceOnline) return 'Offline';
+    return 'Đã kết nối';
   }
 
   Color get wifiStatusColor {
-    if (!isWifiConnected) return Colors.red;
-    if (wifiSignalStrength > -50) return Colors.green;
-    if (wifiSignalStrength > -70) return Colors.orange;
-    return Colors.red;
+    if (!isWifiConnected || !isDeviceOnline) return Colors.red;
+    return Colors.green;
   }
 
   IconData get wifiIcon {
-    if (!isWifiConnected) return Icons.wifi_off;
-    if (wifiSignalStrength > -50) return Icons.wifi;
-    if (wifiSignalStrength > -70) return Icons.wifi_2_bar;
-    return Icons.wifi_1_bar;
+    if (!isWifiConnected || !isDeviceOnline) return Icons.wifi_off;
+    return Icons.wifi;
   }
 
-  void _resetWifi() {
+  Future<void> _resetWifi() async {
+    try {
+      await _firebaseService.resetAP();
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Đã gửi lệnh reset WiFi')));
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Lỗi: $e')));
+      }
+    }
+  }
+
+  void _showResetWifiDialog() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -64,13 +143,7 @@ class _SettingsPageState extends State<SettingsPage> {
             child: const Text('Hủy'),
           ),
           ElevatedButton(
-            onPressed: () {
-              // TODO: Send reset command to Firebase
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Đã gửi lệnh reset WiFi')),
-              );
-            },
+            onPressed: _resetWifi,
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
@@ -101,9 +174,9 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
               Slider(
                 value: tempThreshold,
-                min: 50,
-                max: 500,
-                divisions: 45,
+                min: 0,
+                max: 5000,
+                divisions: 100,
                 label: '${tempThreshold.toInt()} ppm',
                 onChanged: (value) {
                   setDialogState(() {
@@ -113,7 +186,7 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Khi Gas vượt ngưỡng này, hệ thống sẽ cảnh báo',
+                'Khi Gas vượt ngưỡng này, hệ thống sẽ cảnh báo\nPhạm vi: 0-5000 ppm (cảm biến MQ)',
                 style: TextStyle(fontSize: 12, color: Colors.grey),
                 textAlign: TextAlign.center,
               ),
@@ -126,19 +199,31 @@ class _SettingsPageState extends State<SettingsPage> {
             child: const Text('Hủy'),
           ),
           ElevatedButton(
-            onPressed: () {
-              setState(() {
-                gasThreshold = tempThreshold;
-              });
-              // TODO: Send to Firebase
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'Đã cập nhật ngưỡng: ${tempThreshold.toInt()} ppm',
-                  ),
-                ),
-              );
+            onPressed: () async {
+              try {
+                await _firebaseService.updateSettings({
+                  'behavior/threshold': tempThreshold.toInt(),
+                });
+                setState(() {
+                  gasThreshold = tempThreshold;
+                });
+                if (mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Đã cập nhật ngưỡng: ${tempThreshold.toInt()} ppm',
+                      ),
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('Lỗi: $e')));
+                }
+              }
             },
             child: const Text('Lưu'),
           ),
@@ -262,7 +347,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   title: const Text('Reset WiFi'),
                   subtitle: const Text('Khởi động lại và cấu hình WiFi mới'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: _resetWifi,
+                  onTap: _showResetWifiDialog,
                 ),
               ],
             ),
@@ -302,11 +387,33 @@ class _SettingsPageState extends State<SettingsPage> {
                           ),
                         ],
                         selected: {systemMode},
-                        onSelectionChanged: (Set<SystemMode> newSelection) {
-                          setState(() {
-                            systemMode = newSelection.first;
-                          });
-                          // TODO: Send to Firebase
+                        onSelectionChanged: (Set<SystemMode> newSelection) async {
+                          final newMode = newSelection.first;
+                          try {
+                            await _firebaseService.updateSettings({
+                              'behavior/mode': newMode == SystemMode.auto
+                                  ? 0
+                                  : 1,
+                            });
+                            setState(() {
+                              systemMode = newMode;
+                            });
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Đã chuyển sang chế độ ${newMode == SystemMode.auto ? 'AUTO' : 'MANUAL'}',
+                                  ),
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Lỗi: $e')),
+                              );
+                            }
+                          }
                         },
                       ),
                       const SizedBox(height: 8),
@@ -351,18 +458,31 @@ class _SettingsPageState extends State<SettingsPage> {
                           ButtonSegment(value: 5, label: Text('5s')),
                         ],
                         selected: {dataInterval},
-                        onSelectionChanged: (Set<int> newSelection) {
-                          setState(() {
-                            dataInterval = newSelection.first;
-                          });
-                          // TODO: Send to Firebase
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Đã cập nhật: Gửi dữ liệu mỗi ${dataInterval}s',
-                              ),
-                            ),
-                          );
+                        onSelectionChanged: (Set<int> newSelection) async {
+                          final newInterval = newSelection.first;
+                          try {
+                            await _firebaseService.updateSettings({
+                              'dataInterval': newInterval,
+                            });
+                            setState(() {
+                              dataInterval = newInterval;
+                            });
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Đã cập nhật: Gửi dữ liệu mỗi ${newInterval}s',
+                                  ),
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Lỗi: $e')),
+                              );
+                            }
+                          }
                         },
                       ),
                       const SizedBox(height: 8),
