@@ -15,6 +15,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "501406586454-q6vgd02r0c8o80rnfi8baf2ckiq3q55i.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.iot_sonxemaycantho_app",
+            "certificate_hash": "b41084b34081fcd602a8e367a99192d1a1535eb0"
+          }
+        },
+        {
           "client_id": "501406586454-3dtr99l608j9p63jjkclipab1kpcngk9.apps.googleusercontent.com",
           "client_type": 3
         }
@@ -32,10 +40,10 @@
               "client_type": 3
             },
             {
-              "client_id": "501406586454-pfhud5baasv3oil6qqe5hukb2vg84kmp.apps.googleusercontent.com",
+              "client_id": "501406586454-kpvioelue78v5tfekhtsbcb96onjbfe3.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
-                "bundle_id": "com.example.sonxemaycantho"
+                "bundle_id": "com.example.iotSonxemaycanthoApp"
               }
             }
           ]
@@ -76,10 +84,10 @@
               "client_type": 3
             },
             {
-              "client_id": "501406586454-pfhud5baasv3oil6qqe5hukb2vg84kmp.apps.googleusercontent.com",
+              "client_id": "501406586454-kpvioelue78v5tfekhtsbcb96onjbfe3.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
-                "bundle_id": "com.example.sonxemaycantho"
+                "bundle_id": "com.example.iotSonxemaycanthoApp"
               }
             }
           ]

@@ -4,6 +4,7 @@ import '../widgets/sensor_card.dart';
 import '../widgets/warning_banner.dart';
 import '../widgets/switch_tile.dart';
 import '../services/firebase_realtime.dart';
+import '../utils/dialog_helper.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -121,16 +122,12 @@ class _HomePageState extends State<HomePage> {
         'relay$relayNumber',
         newState ? 1 : 0,
       );
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Đã ${newState ? 'bật' : 'tắt'} Relay $relayNumber'),
-          duration: const Duration(seconds: 1),
-        ),
+      DialogHelper.showSuccess(
+        context,
+        'Đã ${newState ? 'bật' : 'tắt'} Relay $relayNumber',
       );
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Lỗi: $e')));
+      DialogHelper.showError(context, 'Lỗi: $e');
     }
   }
 
@@ -140,13 +137,9 @@ class _HomePageState extends State<HomePage> {
       setState(() {
         alarmMuted = true;
       });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Đã tắt còi cảnh báo')));
+      DialogHelper.showSuccess(context, 'Đã tắt còi cảnh báo');
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Lỗi: $e')));
+      DialogHelper.showError(context, 'Lỗi: $e');
     }
   }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import '../services/firebase_realtime.dart';
+import '../utils/dialog_helper.dart';
 
 enum SystemMode { auto, manual }
 
@@ -114,16 +115,12 @@ class _SettingsPageState extends State<SettingsPage> {
       await _firebaseService.resetAP();
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Đã gửi lệnh reset WiFi')));
+        DialogHelper.showSuccess(context, 'Đã gửi lệnh reset WiFi');
       }
     } catch (e) {
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Lỗi: $e')));
+        DialogHelper.showError(context, 'Lỗi: $e');
       }
     }
   }
@@ -133,9 +130,11 @@ class _SettingsPageState extends State<SettingsPage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Reset WiFi'),
-        content: const Text(
-          'Bạn có chắc muốn reset cấu hình WiFi?\n\n'
-          'Thiết bị sẽ khởi động lại và chuyển sang chế độ cấu hình WiFi.',
+        content: const SingleChildScrollView(
+          child: Text(
+            'Bạn có chắc muốn reset cấu hình WiFi?\n\n'
+            'Thiết bị sẽ khởi động lại và chuyển sang chế độ cấu hình WiFi.',
+          ),
         ),
         actions: [
           TextButton(
@@ -161,36 +160,38 @@ class _SettingsPageState extends State<SettingsPage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Cài đặt ngưỡng Gas'),
-        content: StatefulBuilder(
-          builder: (context, setDialogState) => Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '${tempThreshold.toInt()} ppm',
-                style: const TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
+        content: SingleChildScrollView(
+          child: StatefulBuilder(
+            builder: (context, setDialogState) => Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '${tempThreshold.toInt()} ppm',
+                  style: const TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
-              Slider(
-                value: tempThreshold,
-                min: 0,
-                max: 5000,
-                divisions: 100,
-                label: '${tempThreshold.toInt()} ppm',
-                onChanged: (value) {
-                  setDialogState(() {
-                    tempThreshold = value;
-                  });
-                },
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Khi Gas vượt ngưỡng này, hệ thống sẽ cảnh báo\nPhạm vi: 0-5000 ppm (cảm biến MQ)',
-                style: TextStyle(fontSize: 12, color: Colors.grey),
-                textAlign: TextAlign.center,
-              ),
-            ],
+                Slider(
+                  value: tempThreshold,
+                  min: 0,
+                  max: 5000,
+                  divisions: 100,
+                  label: '${tempThreshold.toInt()} ppm',
+                  onChanged: (value) {
+                    setDialogState(() {
+                      tempThreshold = value;
+                    });
+                  },
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Khi Gas vượt ngưỡng này, hệ thống sẽ cảnh báo\nPhạm vi: 0-5000 ppm (cảm biến MQ)',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
           ),
         ),
         actions: [
@@ -209,19 +210,14 @@ class _SettingsPageState extends State<SettingsPage> {
                 });
                 if (mounted) {
                   Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        'Đã cập nhật ngưỡng: ${tempThreshold.toInt()} ppm',
-                      ),
-                    ),
+                  DialogHelper.showSuccess(
+                    context,
+                    'Đã cập nhật ngưỡng: ${tempThreshold.toInt()} ppm',
                   );
                 }
               } catch (e) {
                 if (mounted) {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text('Lỗi: $e')));
+                  DialogHelper.showError(context, 'Lỗi: $e');
                 }
               }
             },
@@ -239,273 +235,322 @@ class _SettingsPageState extends State<SettingsPage> {
         title: const Text('Cài đặt'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16.0),
-        children: [
-          // A. Thông tin thiết bị
-          _buildSectionTitle('Thông tin thiết bị', Icons.devices),
-          Card(
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.fingerprint),
-                  title: const Text('ID thiết bị'),
-                  subtitle: Text(deviceId),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.copy, size: 20),
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Đã copy ID')),
-                      );
-                    },
-                  ),
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: Icon(
-                    isDeviceOnline ? Icons.check_circle : Icons.error,
-                    color: isDeviceOnline ? Colors.green : Colors.red,
-                  ),
-                  title: const Text('Trạng thái'),
-                  subtitle: Text(isDeviceOnline ? 'Online' : 'Offline'),
-                  trailing: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isDeviceOnline
-                          ? Colors.green.shade50
-                          : Colors.red.shade50,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      isDeviceOnline ? 'Hoạt động' : 'Mất kết nối',
-                      style: TextStyle(
-                        color: isDeviceOnline ? Colors.green : Colors.red,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.sensors),
-                  title: const Text('Cảm biến đang dùng'),
-                  subtitle: Padding(
-                    padding: const EdgeInsets.only(top: 8.0),
-                    child: Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        if (hasTempSensor) _buildSensorChip('Nhiệt độ'),
-                        if (hasHumiditySensor) _buildSensorChip('Độ ẩm'),
-                        if (hasGasSensor) _buildSensorChip('Gas'),
-                        if (hasFlameSensor) _buildSensorChip('Lửa'),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          // B. Cấu hình mạng (WiFi)
-          _buildSectionTitle('Cấu hình mạng', Icons.wifi),
-          Card(
-            child: Column(
-              children: [
-                ListTile(
-                  leading: Icon(wifiIcon, color: wifiStatusColor),
-                  title: const Text('Trạng thái WiFi'),
-                  subtitle: Text(isWifiConnected ? wifiSsid : 'Chưa kết nối'),
-                  trailing: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: wifiStatusColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      wifiStatus,
-                      style: TextStyle(
-                        color: wifiStatusColor,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.restart_alt, color: Colors.orange),
-                  title: const Text('Reset WiFi'),
-                  subtitle: const Text('Khởi động lại và cấu hình WiFi mới'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: _showResetWifiDialog,
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          // C. Điều khiển hệ thống
-          _buildSectionTitle('Điều khiển hệ thống', Icons.settings_suggest),
-          Card(
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Chế độ hoạt động',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      SegmentedButton<SystemMode>(
-                        segments: const [
-                          ButtonSegment(
-                            value: SystemMode.auto,
-                            label: Text('AUTO'),
-                            icon: Icon(Icons.auto_mode),
-                          ),
-                          ButtonSegment(
-                            value: SystemMode.manual,
-                            label: Text('MANUAL'),
-                            icon: Icon(Icons.touch_app),
-                          ),
-                        ],
-                        selected: {systemMode},
-                        onSelectionChanged: (Set<SystemMode> newSelection) async {
-                          final newMode = newSelection.first;
-                          try {
-                            await _firebaseService.updateSettings({
-                              'behavior/mode': newMode == SystemMode.auto
-                                  ? 0
-                                  : 1,
-                            });
-                            setState(() {
-                              systemMode = newMode;
-                            });
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    'Đã chuyển sang chế độ ${newMode == SystemMode.auto ? 'AUTO' : 'MANUAL'}',
+                      // A. Thông tin thiết bị
+                      _buildSectionTitle('Thông tin thiết bị', Icons.devices),
+                      Card(
+                        child: Column(
+                          children: [
+                            ListTile(
+                              leading: const Icon(Icons.fingerprint),
+                              title: const Text('ID thiết bị'),
+                              subtitle: Text(deviceId),
+                              trailing: IconButton(
+                                icon: const Icon(Icons.copy, size: 20),
+                                onPressed: () {
+                                  DialogHelper.showSuccess(
+                                    context,
+                                    'Đã copy ID',
+                                  );
+                                },
+                              ),
+                            ),
+                            const Divider(height: 1),
+                            ListTile(
+                              leading: Icon(
+                                isDeviceOnline
+                                    ? Icons.check_circle
+                                    : Icons.error,
+                                color: isDeviceOnline
+                                    ? Colors.green
+                                    : Colors.red,
+                              ),
+                              title: const Text('Trạng thái'),
+                              subtitle: Text(
+                                isDeviceOnline ? 'Online' : 'Offline',
+                              ),
+                              trailing: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isDeviceOnline
+                                      ? Colors.green.shade50
+                                      : Colors.red.shade50,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  isDeviceOnline ? 'Hoạt động' : 'Mất kết nối',
+                                  style: TextStyle(
+                                    color: isDeviceOnline
+                                        ? Colors.green
+                                        : Colors.red,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
                                   ),
                                 ),
-                              );
-                            }
-                          } catch (e) {
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Lỗi: $e')),
-                              );
-                            }
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        systemMode == SystemMode.auto
-                            ? '✓ Hệ thống tự động điều khiển khi có cảnh báo'
-                            : '✓ Điều khiển thủ công qua ứng dụng',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey,
+                              ),
+                            ),
+                            const Divider(height: 1),
+                            ListTile(
+                              leading: const Icon(Icons.sensors),
+                              title: const Text('Cảm biến đang dùng'),
+                              subtitle: Padding(
+                                padding: const EdgeInsets.only(top: 8.0),
+                                child: Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    if (hasTempSensor)
+                                      _buildSensorChip('Nhiệt độ'),
+                                    if (hasHumiditySensor)
+                                      _buildSensorChip('Độ ẩm'),
+                                    if (hasGasSensor) _buildSensorChip('Gas'),
+                                    if (hasFlameSensor) _buildSensorChip('Lửa'),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
+
+                      const SizedBox(height: 12),
+
+                      // B. Cấu hình mạng (WiFi)
+                      _buildSectionTitle('Cấu hình mạng', Icons.wifi),
+                      Card(
+                        child: Column(
+                          children: [
+                            ListTile(
+                              leading: Icon(wifiIcon, color: wifiStatusColor),
+                              title: const Text('Trạng thái WiFi'),
+                              subtitle: Text(
+                                isWifiConnected ? wifiSsid : 'Chưa kết nối',
+                              ),
+                              trailing: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: wifiStatusColor.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  wifiStatus,
+                                  style: TextStyle(
+                                    color: wifiStatusColor,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const Divider(height: 1),
+                            ListTile(
+                              leading: const Icon(
+                                Icons.restart_alt,
+                                color: Colors.orange,
+                              ),
+                              title: const Text('Reset WiFi'),
+                              subtitle: const Text(
+                                'Khởi động lại và cấu hình WiFi mới',
+                              ),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: _showResetWifiDialog,
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      // C. Điều khiển hệ thống
+                      _buildSectionTitle(
+                        'Điều khiển hệ thống',
+                        Icons.settings_suggest,
+                      ),
+                      Card(
+                        child: Column(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.all(12.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Chế độ hoạt động',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  SegmentedButton<SystemMode>(
+                                    segments: const [
+                                      ButtonSegment(
+                                        value: SystemMode.auto,
+                                        label: Text('AUTO'),
+                                        icon: Icon(Icons.auto_mode),
+                                      ),
+                                      ButtonSegment(
+                                        value: SystemMode.manual,
+                                        label: Text('MANUAL'),
+                                        icon: Icon(Icons.touch_app),
+                                      ),
+                                    ],
+                                    selected: {systemMode},
+                                    onSelectionChanged:
+                                        (Set<SystemMode> newSelection) async {
+                                          final newMode = newSelection.first;
+                                          try {
+                                            await _firebaseService
+                                                .updateSettings({
+                                                  'behavior/mode':
+                                                      newMode == SystemMode.auto
+                                                      ? 0
+                                                      : 1,
+                                                });
+                                            setState(() {
+                                              systemMode = newMode;
+                                            });
+                                            if (mounted) {
+                                              DialogHelper.showSuccess(
+                                                context,
+                                                'Đã chuyển sang chế độ ${newMode == SystemMode.auto ? 'AUTO' : 'MANUAL'}',
+                                              );
+                                            }
+                                          } catch (e) {
+                                            if (mounted) {
+                                              DialogHelper.showError(
+                                                context,
+                                                'Lỗi: $e',
+                                              );
+                                            }
+                                          }
+                                        },
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    systemMode == SystemMode.auto
+                                        ? '✓ Hệ thống tự động điều khiển khi có cảnh báo'
+                                        : '✓ Điều khiển thủ công qua ứng dụng',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Divider(height: 1),
+                            ListTile(
+                              leading: const Icon(Icons.warning_amber),
+                              title: const Text('Ngưỡng cảnh báo Gas'),
+                              subtitle: Text('${gasThreshold.toInt()} ppm'),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: _showGasThresholdDialog,
+                            ),
+                            const Divider(height: 1),
+                            Padding(
+                              padding: const EdgeInsets.all(12.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Tần suất gửi dữ liệu',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  SegmentedButton<int>(
+                                    segments: const [
+                                      ButtonSegment(
+                                        value: 1,
+                                        label: Text('1s'),
+                                      ),
+                                      ButtonSegment(
+                                        value: 2,
+                                        label: Text('2s'),
+                                      ),
+                                      ButtonSegment(
+                                        value: 5,
+                                        label: Text('5s'),
+                                      ),
+                                    ],
+                                    selected: {dataInterval},
+                                    onSelectionChanged:
+                                        (Set<int> newSelection) async {
+                                          final newInterval =
+                                              newSelection.first;
+                                          try {
+                                            await _firebaseService
+                                                .updateSettings({
+                                                  'dataInterval': newInterval,
+                                                });
+                                            setState(() {
+                                              dataInterval = newInterval;
+                                            });
+                                            if (mounted) {
+                                              DialogHelper.showSuccess(
+                                                context,
+                                                'Đã cập nhật: Gửi dữ liệu mỗi ${newInterval}s',
+                                              );
+                                            }
+                                          } catch (e) {
+                                            if (mounted) {
+                                              DialogHelper.showError(
+                                                context,
+                                                'Lỗi: $e',
+                                              );
+                                            }
+                                          }
+                                        },
+                                  ),
+                                  const SizedBox(height: 8),
+                                  const Text(
+                                    'Tần suất ESP32 gửi dữ liệu lên Firebase',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 12),
                     ],
                   ),
                 ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.warning_amber),
-                  title: const Text('Ngưỡng cảnh báo Gas'),
-                  subtitle: Text('${gasThreshold.toInt()} ppm'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: _showGasThresholdDialog,
-                ),
-                const Divider(height: 1),
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Tần suất gửi dữ liệu',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      SegmentedButton<int>(
-                        segments: const [
-                          ButtonSegment(value: 1, label: Text('1s')),
-                          ButtonSegment(value: 2, label: Text('2s')),
-                          ButtonSegment(value: 5, label: Text('5s')),
-                        ],
-                        selected: {dataInterval},
-                        onSelectionChanged: (Set<int> newSelection) async {
-                          final newInterval = newSelection.first;
-                          try {
-                            await _firebaseService.updateSettings({
-                              'dataInterval': newInterval,
-                            });
-                            setState(() {
-                              dataInterval = newInterval;
-                            });
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    'Đã cập nhật: Gửi dữ liệu mỗi ${newInterval}s',
-                                  ),
-                                ),
-                              );
-                            }
-                          } catch (e) {
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Lỗi: $e')),
-                              );
-                            }
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Tần suất ESP32 gửi dữ liệu lên Firebase',
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 24),
-        ],
+              ),
+            );
+          },
+        ),
       ),
     );
   }
 
   Widget _buildSectionTitle(String title, IconData icon) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12.0),
+      padding: const EdgeInsets.only(bottom: 8.0),
       child: Row(
         children: [
           Icon(icon, size: 20, color: Colors.blue),

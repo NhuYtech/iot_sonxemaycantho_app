@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../services/auth.dart';
+import '../utils/dialog_helper.dart';
 
 class AccountPage extends StatefulWidget {
   const AccountPage({super.key});
@@ -9,10 +12,8 @@ class AccountPage extends StatefulWidget {
 }
 
 class _AccountPageState extends State<AccountPage> {
-  // Mock data - sẽ được load từ Firebase Auth
-  String userName = 'Nguyễn Văn A';
-  String userEmail = 'nguyenvana@gmail.com';
-  String? avatarUrl; // null sẽ hiển thị chữ cái đầu
+  final AuthService _authService = AuthService();
+
   DateTime accountCreatedDate = DateTime(2024, 1, 15);
 
   void _logout() {
@@ -27,12 +28,18 @@ class _AccountPageState extends State<AccountPage> {
             child: const Text('Hủy'),
           ),
           ElevatedButton(
-            onPressed: () {
-              // TODO: Sign out from Firebase Auth
-              Navigator.pop(context);
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(const SnackBar(content: Text('Đã đăng xuất')));
+            onPressed: () async {
+              try {
+                if (mounted) {
+                  Navigator.pop(context); // Close confirm dialog first
+                }
+                await _authService.signOut();
+                // No need to show success dialog, user will be redirected to login
+              } catch (e) {
+                if (mounted) {
+                  DialogHelper.showError(context, 'Lỗi đăng xuất: $e');
+                }
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
@@ -60,14 +67,18 @@ class _AccountPageState extends State<AccountPage> {
             child: const Text('Hủy'),
           ),
           ElevatedButton(
-            onPressed: () {
-              // TODO: Revoke all sessions and sign out
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Đã đăng xuất khỏi tất cả thiết bị'),
-                ),
-              );
+            onPressed: () async {
+              try {
+                if (mounted) {
+                  Navigator.pop(context); // Close confirm dialog first
+                }
+                await _authService.signOut();
+                // No need to show success dialog, user will be redirected to login
+              } catch (e) {
+                if (mounted) {
+                  DialogHelper.showError(context, 'Lỗi: $e');
+                }
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
@@ -91,6 +102,17 @@ class _AccountPageState extends State<AccountPage> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final User? currentUser = _authService.currentUser;
+
+    // User must be logged in to access the app
+    if (currentUser == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    // User is logged in
+    final String userName = currentUser.displayName ?? 'Người dùng';
+    final String userEmail = currentUser.email ?? '';
+    final String? avatarUrl = currentUser.photoURL;
 
     return Scaffold(
       appBar: AppBar(
@@ -134,7 +156,7 @@ class _AccountPageState extends State<AccountPage> {
                       child: avatarUrl != null
                           ? ClipOval(
                               child: Image.network(
-                                avatarUrl!,
+                                avatarUrl,
                                 fit: BoxFit.cover,
                                 errorBuilder: (context, error, stackTrace) {
                                   return Center(
