@@ -2,13 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
 import 'pages/home.dart';
 import 'pages/stats.dart';
 import 'pages/settings.dart';
 import 'pages/account.dart';
-import 'pages/login.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -44,25 +42,7 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
       ),
-      home: StreamBuilder<User?>(
-        stream: FirebaseAuth.instance.authStateChanges(),
-        builder: (context, snapshot) {
-          // Check if user is logged in
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
-            );
-          }
-
-          if (snapshot.hasData && snapshot.data != null) {
-            // User is logged in, show main app
-            return const MainNavigation();
-          } else {
-            // User is not logged in, show login page
-            return const LoginPage();
-          }
-        },
-      ),
+      home: const MainNavigation(),
     );
   }
 }

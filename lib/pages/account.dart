@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import '../services/auth.dart';
-import '../utils/dialog_helper.dart';
+import '../services/firebase_realtime.dart';
+import 'dart:async';
 
 class AccountPage extends StatefulWidget {
   const AccountPage({super.key});
@@ -12,117 +11,83 @@ class AccountPage extends StatefulWidget {
 }
 
 class _AccountPageState extends State<AccountPage> {
-  final AuthService _authService = AuthService();
+  final FirebaseRealtimeService _firebaseService = FirebaseRealtimeService();
 
-  DateTime accountCreatedDate = DateTime(2024, 1, 15);
+  StreamSubscription? _wifiSubscription;
+  StreamSubscription? _sensorSubscription;
 
-  void _logout() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Đăng xuất'),
-        content: const Text('Bạn có chắc muốn đăng xuất khỏi tài khoản này?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Hủy'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              try {
-                if (mounted) {
-                  Navigator.pop(context); // Close confirm dialog first
-                }
-                await _authService.signOut();
-                // No need to show success dialog, user will be redirected to login
-              } catch (e) {
-                if (mounted) {
-                  DialogHelper.showError(context, 'Lỗi đăng xuất: $e');
-                }
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Đăng xuất'),
-          ),
-        ],
-      ),
-    );
+  String deviceId = 'ESP32-001';
+  String wifiSsid = '';
+  bool isWifiConnected = false;
+  bool isDeviceOnline = false;
+  DateTime? wifiTimestamp;
+  DateTime? lastSensorUpdate;
+
+  // Sensor data for display
+  double temperature = 0.0;
+  double humidity = 0.0;
+  double gasLevel = 0.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _listenToWifi();
+    _listenToSensors();
   }
 
-  void _logoutAllDevices() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Đăng xuất tất cả thiết bị'),
-        content: const Text(
-          'Bạn sẽ bị đăng xuất khỏi tất cả các thiết bị đang đăng nhập.\n\n'
-          'Bạn có chắc muốn tiếp tục?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Hủy'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              try {
-                if (mounted) {
-                  Navigator.pop(context); // Close confirm dialog first
-                }
-                await _authService.signOut();
-                // No need to show success dialog, user will be redirected to login
-              } catch (e) {
-                if (mounted) {
-                  DialogHelper.showError(context, 'Lỗi: $e');
-                }
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Đăng xuất tất cả'),
-          ),
-        ],
-      ),
-    );
+  @override
+  void dispose() {
+    _wifiSubscription?.cancel();
+    _sensorSubscription?.cancel();
+    super.dispose();
   }
 
-  String _getInitials(String name) {
-    List<String> parts = name.split(' ');
-    if (parts.length >= 2) {
-      return '${parts[0][0]}${parts[parts.length - 1][0]}'.toUpperCase();
-    }
-    return name.isNotEmpty ? name[0].toUpperCase() : '?';
+  void _listenToWifi() {
+    _wifiSubscription = _firebaseService.getWifiConfigStream().listen((data) {
+      if (mounted) {
+        setState(() {
+          wifiSsid = data['ssid'] ?? '';
+          isWifiConnected =
+              data['ssid'] != null && data['ssid'].toString().isNotEmpty;
+
+          if (data['timestamp'] != null) {
+            wifiTimestamp = DateTime.fromMillisecondsSinceEpoch(
+              int.tryParse(data['timestamp'].toString()) ?? 0,
+            );
+            isDeviceOnline =
+                DateTime.now().difference(wifiTimestamp!).inSeconds < 30;
+          }
+        });
+      }
+    });
+  }
+
+  void _listenToSensors() {
+    _sensorSubscription = _firebaseService.getSensorStream().listen((data) {
+      if (mounted) {
+        setState(() {
+          temperature = (data['temp'] ?? 0).toDouble();
+          humidity = (data['humi'] ?? 0).toDouble();
+          gasLevel = (data['mq2'] ?? 0).toDouble();
+          lastSensorUpdate = DateTime.now();
+        });
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final User? currentUser = _authService.currentUser;
-
-    // User must be logged in to access the app
-    if (currentUser == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
-
-    // User is logged in
-    final String userName = currentUser.displayName ?? 'Người dùng';
-    final String userEmail = currentUser.email ?? '';
-    final String? avatarUrl = currentUser.photoURL;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Tài khoản'),
+        title: const Text('Thiết bị & Kết nối'),
         backgroundColor: colorScheme.inversePrimary,
       ),
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // Profile Header
+            // Device Header
             Container(
               width: double.infinity,
               decoration: BoxDecoration(
@@ -137,13 +102,13 @@ class _AccountPageState extends State<AccountPage> {
                 padding: const EdgeInsets.symmetric(vertical: 32.0),
                 child: Column(
                   children: [
-                    // Avatar
+                    // Device Icon
                     Container(
                       width: 100,
                       height: 100,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: colorScheme.primary,
+                        color: isDeviceOnline ? Colors.green : Colors.grey,
                         border: Border.all(color: Colors.white, width: 4),
                         boxShadow: [
                           BoxShadow(
@@ -153,41 +118,17 @@ class _AccountPageState extends State<AccountPage> {
                           ),
                         ],
                       ),
-                      child: avatarUrl != null
-                          ? ClipOval(
-                              child: Image.network(
-                                avatarUrl,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) {
-                                  return Center(
-                                    child: Text(
-                                      _getInitials(userName),
-                                      style: const TextStyle(
-                                        fontSize: 36,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            )
-                          : Center(
-                              child: Text(
-                                _getInitials(userName),
-                                style: const TextStyle(
-                                  fontSize: 36,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
+                      child: const Icon(
+                        Icons.memory,
+                        size: 50,
+                        color: Colors.white,
+                      ),
                     ),
                     const SizedBox(height: 16),
 
-                    // Name
+                    // Device Name
                     Text(
-                      userName,
+                      deviceId,
                       style: const TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
@@ -195,27 +136,41 @@ class _AccountPageState extends State<AccountPage> {
                     ),
                     const SizedBox(height: 4),
 
-                    // Email
-                    Text(
-                      userEmail,
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.grey.shade600,
-                      ),
+                    // Connection Status
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: isDeviceOnline ? Colors.green : Colors.red,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          isDeviceOnline ? 'Đang kết nối' : 'Ngoại tuyến',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ),
             ),
 
-            // Account Information
+            // Device Information
             Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Thông tin tài khoản',
+                    'Thông tin thiết bị',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 12),
@@ -225,66 +180,47 @@ class _AccountPageState extends State<AccountPage> {
                       children: [
                         ListTile(
                           leading: Icon(
-                            Icons.person_outline,
+                            Icons.device_hub,
                             color: colorScheme.primary,
                           ),
-                          title: const Text('Tên hiển thị'),
-                          subtitle: Text(userName),
+                          title: const Text('Mã thiết bị'),
+                          subtitle: Text(deviceId),
                         ),
                         const Divider(height: 1),
                         ListTile(
                           leading: Icon(
-                            Icons.email_outlined,
-                            color: colorScheme.primary,
+                            Icons.wifi,
+                            color: isWifiConnected ? Colors.green : Colors.grey,
                           ),
-                          title: const Text('Email'),
-                          subtitle: Text(userEmail),
-                        ),
-                        const Divider(height: 1),
-                        ListTile(
-                          leading: Icon(
-                            Icons.calendar_today,
-                            color: colorScheme.primary,
-                          ),
-                          title: const Text('Ngày tạo tài khoản'),
+                          title: const Text('WiFi'),
                           subtitle: Text(
-                            DateFormat('dd/MM/yyyy').format(accountCreatedDate),
+                            isWifiConnected ? wifiSsid : 'Chưa kết nối',
                           ),
                         ),
                         const Divider(height: 1),
                         ListTile(
-                          leading: const Icon(
-                            Icons.shield_outlined,
-                            color: Colors.green,
+                          leading: Icon(
+                            Icons.access_time,
+                            color: colorScheme.primary,
                           ),
-                          title: const Text('Đăng nhập bằng'),
-                          subtitle: Row(
-                            children: [
-                              Image.network(
-                                'https://www.google.com/favicon.ico',
-                                width: 16,
-                                height: 16,
-                                errorBuilder: (context, error, stackTrace) {
-                                  return const Icon(
-                                    Icons.g_mobiledata,
-                                    size: 16,
-                                  );
-                                },
-                              ),
-                              const SizedBox(width: 6),
-                              const Text('Google'),
-                            ],
+                          title: const Text('Cập nhật lần cuối'),
+                          subtitle: Text(
+                            wifiTimestamp != null
+                                ? DateFormat(
+                                    'dd/MM/yyyy HH:mm:ss',
+                                  ).format(wifiTimestamp!)
+                                : 'Chưa có dữ liệu',
                           ),
                         ),
                       ],
                     ),
                   ),
 
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 24),
 
-                  // Account Actions
+                  // Sensor Data
                   const Text(
-                    'Hành động',
+                    'Dữ liệu cảm biến',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 12),
@@ -294,26 +230,41 @@ class _AccountPageState extends State<AccountPage> {
                       children: [
                         ListTile(
                           leading: const Icon(
-                            Icons.logout,
+                            Icons.thermostat,
                             color: Colors.orange,
                           ),
-                          title: const Text('Đăng xuất'),
-                          subtitle: const Text('Đăng xuất khỏi thiết bị này'),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: _logout,
+                          title: const Text('Nhiệt độ'),
+                          subtitle: Text('${temperature.toStringAsFixed(1)}°C'),
                         ),
                         const Divider(height: 1),
                         ListTile(
                           leading: const Icon(
-                            Icons.devices_other,
-                            color: Colors.red,
+                            Icons.water_drop,
+                            color: Colors.blue,
                           ),
-                          title: const Text('Đăng xuất tất cả thiết bị'),
-                          subtitle: const Text(
-                            'Đăng xuất khỏi mọi thiết bị đang đăng nhập',
+                          title: const Text('Độ ẩm'),
+                          subtitle: Text('${humidity.toStringAsFixed(1)}%'),
+                        ),
+                        const Divider(height: 1),
+                        ListTile(
+                          leading: const Icon(Icons.air, color: Colors.purple),
+                          title: const Text('Khí gas'),
+                          subtitle: Text(gasLevel.toStringAsFixed(0)),
+                        ),
+                        const Divider(height: 1),
+                        ListTile(
+                          leading: Icon(
+                            Icons.update,
+                            color: colorScheme.primary,
                           ),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: _logoutAllDevices,
+                          title: const Text('Cập nhật cảm biến'),
+                          subtitle: Text(
+                            lastSensorUpdate != null
+                                ? DateFormat(
+                                    'HH:mm:ss',
+                                  ).format(lastSensorUpdate!)
+                                : 'Chưa có dữ liệu',
+                          ),
                         ),
                       ],
                     ),
@@ -338,6 +289,15 @@ class _AccountPageState extends State<AccountPage> {
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.grey.shade500,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Kết nối trực tiếp với ESP32',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade400,
+                            fontStyle: FontStyle.italic,
                           ),
                         ),
                       ],
