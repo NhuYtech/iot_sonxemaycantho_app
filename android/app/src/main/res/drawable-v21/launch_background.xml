@@ -1,22 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Modify this file to customize your launch splash screen -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Gradient background -->
+    <!-- Gradient background - Fire theme -->
     <item>
         <shape android:shape="rectangle">
             <gradient
                 android:type="linear"
                 android:angle="270"
-                android:startColor="#4A1C0C"
-                android:centerColor="#B84A1F"
-                android:endColor="#FF8A50" />
+                android:startColor="#2A0805"
+                android:centerColor="#8A2F17"
+                android:endColor="#F08A4B" />
         </shape>
     </item>
 
-    <!-- App icon in center -->
-    <item>
-        <bitmap
-            android:gravity="center"
-            android:src="@mipmap/ic_launcher" />
+    <!-- Fire icon circle border -->
+    <item
+        android:width="120dp"
+        android:height="120dp"
+        android:gravity="center">
+        <shape android:shape="oval">
+            <stroke
+                android:width="2dp"
+                android:color="#4DFFFFFF" />
+            <solid android:color="#00000000" />
+        </shape>
     </item>
 </layer-list>

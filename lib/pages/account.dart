@@ -80,10 +80,7 @@ class _AccountPageState extends State<AccountPage> {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Thiết bị & Kết nối'),
-        backgroundColor: colorScheme.inversePrimary,
-      ),
+      appBar: AppBar(title: const Text('Thiết bị & Kết nối')),
       body: SingleChildScrollView(
         child: Column(
           children: [

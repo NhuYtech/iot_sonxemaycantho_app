@@ -40,9 +40,13 @@ dependencies:
   # Firebase packages
   firebase_core: ^3.8.1
   firebase_database: ^11.3.4
+  firebase_auth: ^5.3.4
   
   # Date formatting
   intl: ^0.20.2
+  
+  # Chart library
+  fl_chart: ^0.69.2
 
 dev_dependencies:
   flutter_test:

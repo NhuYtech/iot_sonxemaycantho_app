@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'dart:async';
 import '../widgets/stat_summary.dart';
-import '../widgets/chart_placeholder.dart';
+import '../widgets/temperature_chart.dart';
+import '../widgets/humidity_chart.dart';
+import '../widgets/gas_chart.dart';
+import '../services/firebase_realtime.dart';
 
 enum TimeRange { day, week, month }
 
@@ -13,21 +17,215 @@ class StatsPage extends StatefulWidget {
 }
 
 class _StatsPageState extends State<StatsPage> {
+  final FirebaseRealtimeService _firebaseService = FirebaseRealtimeService();
+  StreamSubscription? _historySubscription;
+
   TimeRange selectedRange = TimeRange.day;
   DateTime selectedDate = DateTime.now();
 
-  // Mock data - sẽ thay thế bằng dữ liệu từ Firebase
-  double maxTemp = 35.2;
-  double minTemp = 22.1;
-  double avgTemp = 28.5;
+  bool isLoading = true;
 
-  double maxHumidity = 85.0;
-  double minHumidity = 45.0;
-  double avgHumidity = 65.0;
+  // Dữ liệu thống kê
+  double maxTemp = 0;
+  double minTemp = 0;
+  double avgTemp = 0;
 
-  double maxGas = 250.0;
-  double minGas = 50.0;
-  double avgGas = 120.0;
+  double maxHumidity = 0;
+  double minHumidity = 0;
+  double avgHumidity = 0;
+
+  double maxGas = 0;
+  double minGas = 0;
+  double avgGas = 0;
+
+  // Dữ liệu biểu đồ 24 giờ
+  List<double> temperatureData = [];
+  List<double> humidityData = [];
+  List<double> gasData = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHistoryData();
+  }
+
+  @override
+  void dispose() {
+    _historySubscription?.cancel();
+    super.dispose();
+  }
+
+  // Load dữ liệu lịch sử từ Firebase
+  Future<void> _loadHistoryData() async {
+    setState(() {
+      isLoading = true;
+    });
+
+    try {
+      // Test xem có data không
+      print('🔍 Testing Firebase connection...');
+      final testData = await _firebaseService.getHistoryData(selectedDate);
+      print('🔍 Test result: ${testData.length} entries found');
+
+      // Lắng nghe realtime updates
+      _historySubscription?.cancel();
+      _historySubscription = _firebaseService
+          .getHistoryStream(selectedDate)
+          .listen((data) {
+            print('📡 Received realtime update with ${data.length} entries');
+            if (mounted) {
+              _processHistoryData(data);
+            }
+          });
+    } catch (e) {
+      print('❌ Error loading history: $e');
+      setState(() {
+        isLoading = false;
+      });
+    }
+  }
+
+  // Xử lý dữ liệu lịch sử
+  void _processHistoryData(Map<String, dynamic> data) {
+    print('🔄 Processing history data: ${data.length} entries');
+
+    if (data.isEmpty) {
+      print('⚠️ No history data to process');
+      setState(() {
+        isLoading = false;
+        temperatureData = [];
+        humidityData = [];
+        gasData = [];
+      });
+      return;
+    }
+
+    print('✅ Data keys: ${data.keys.take(5).join(", ")}...');
+
+    // Tạo mảng 24 giờ
+    List<List<double>> tempByHour = List.generate(24, (_) => []);
+    List<List<double>> humiByHour = List.generate(24, (_) => []);
+    List<List<double>> gasByHour = List.generate(24, (_) => []);
+
+    List<double> allTemps = [];
+    List<double> allHumis = [];
+    List<double> allGases = [];
+
+    // Phân loại dữ liệu theo giờ
+    int validEntries = 0;
+    int invalidEntries = 0;
+
+    data.forEach((key, value) {
+      if (value is Map) {
+        final timestamp = value['timestamp'];
+        final temp = (value['temp'] ?? 0).toDouble();
+        final humi = (value['humi'] ?? 0).toDouble();
+        final gas = (value['mq2'] ?? 0).toDouble();
+
+        if (timestamp != null) {
+          final date = DateTime.fromMillisecondsSinceEpoch(timestamp);
+          final hour = date.hour;
+          validEntries++;
+
+          // Debug first entry
+          if (validEntries == 1) {
+            print(
+              '📝 First entry: hour=$hour, temp=$temp, humi=$humi, gas=$gas',
+            );
+          }
+
+          if (temp >= -40 && temp <= 80) {
+            tempByHour[hour].add(temp);
+            allTemps.add(temp);
+          }
+          if (humi >= 0 && humi <= 100) {
+            humiByHour[hour].add(humi);
+            allHumis.add(humi);
+          }
+          if (gas >= 0) {
+            gasByHour[hour].add(gas);
+            allGases.add(gas);
+          }
+        } else {
+          invalidEntries++;
+        }
+      }
+    });
+
+    print('📊 Valid entries: $validEntries, Invalid: $invalidEntries');
+    print('📊 Temperature data points: ${allTemps.length}');
+
+    // Debug data distribution by hour
+    for (int i = 0; i < 24; i++) {
+      if (tempByHour[i].isNotEmpty) {
+        print('   Hour $i: ${tempByHour[i].length} entries');
+      }
+    }
+
+    // Tính trung bình mỗi giờ cho biểu đồ
+    List<double> tempChart = [];
+    List<double> humiChart = [];
+    List<double> gasChart = [];
+
+    for (int i = 0; i < 24; i++) {
+      tempChart.add(
+        tempByHour[i].isEmpty
+            ? (i > 0 ? tempChart[i - 1] : 0)
+            : tempByHour[i].reduce((a, b) => a + b) / tempByHour[i].length,
+      );
+
+      humiChart.add(
+        humiByHour[i].isEmpty
+            ? (i > 0 ? humiChart[i - 1] : 0)
+            : humiByHour[i].reduce((a, b) => a + b) / humiByHour[i].length,
+      );
+
+      gasChart.add(
+        gasByHour[i].isEmpty
+            ? (i > 0 ? gasChart[i - 1] : 0)
+            : gasByHour[i].reduce((a, b) => a + b) / gasByHour[i].length,
+      );
+    }
+
+    setState(() {
+      // Cập nhật dữ liệu biểu đồ
+      temperatureData = tempChart;
+      humidityData = humiChart;
+      gasData = gasChart;
+
+      print(
+        '📈 Chart data updated: temp=${tempChart.length}, humi=${humiChart.length}, gas=${gasChart.length}',
+      );
+      print('📈 Temp chart sample: ${tempChart.take(5).join(", ")}');
+
+      // Cập nhật thống kê
+      if (allTemps.isNotEmpty) {
+        maxTemp = allTemps.reduce((a, b) => a > b ? a : b);
+        minTemp = allTemps.reduce((a, b) => a < b ? a : b);
+        avgTemp = allTemps.reduce((a, b) => a + b) / allTemps.length;
+        print('🌡️ Temp stats: max=$maxTemp, min=$minTemp, avg=$avgTemp');
+      }
+
+      if (allHumis.isNotEmpty) {
+        maxHumidity = allHumis.reduce((a, b) => a > b ? a : b);
+        minHumidity = allHumis.reduce((a, b) => a < b ? a : b);
+        avgHumidity = allHumis.reduce((a, b) => a + b) / allHumis.length;
+        print(
+          '💧 Humi stats: max=$maxHumidity, min=$minHumidity, avg=$avgHumidity',
+        );
+      }
+
+      if (allGases.isNotEmpty) {
+        maxGas = allGases.reduce((a, b) => a > b ? a : b);
+        minGas = allGases.reduce((a, b) => a < b ? a : b);
+        avgGas = allGases.reduce((a, b) => a + b) / allGases.length;
+        print('💨 Gas stats: max=$maxGas, min=$minGas, avg=$avgGas');
+      }
+
+      isLoading = false;
+      print('✅ Stats page update complete!');
+    });
+  }
 
   String get rangeTitle {
     switch (selectedRange) {
@@ -76,8 +274,8 @@ class _StatsPageState extends State<StatsPage> {
     if (picked != null && picked != selectedDate) {
       setState(() {
         selectedDate = picked!;
-        // TODO: Load data from Firebase for selected date
       });
+      _loadHistoryData();
     }
   }
 
@@ -94,8 +292,31 @@ class _StatsPageState extends State<StatsPage> {
           1,
         );
       }
-      // TODO: Load data from Firebase for new date
     });
+    _loadHistoryData();
+  }
+
+  // Generate test data (chỉ dùng khi debug)
+  Future<void> _generateTestData() async {
+    try {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('🧪 Đang tạo test data...')));
+
+      await _firebaseService.generateTestHistoryData(selectedDate);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('✅ Test data đã được tạo!')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('❌ Lỗi: $e')));
+      }
+    }
   }
 
   @override
@@ -103,7 +324,14 @@ class _StatsPageState extends State<StatsPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Thống kê'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        actions: [
+          // Debug button - long press để hiện
+          IconButton(
+            icon: const Icon(Icons.bug_report),
+            onPressed: _generateTestData,
+            tooltip: 'Tạo test data',
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         child: Padding(
@@ -139,8 +367,8 @@ class _StatsPageState extends State<StatsPage> {
                 onSelectionChanged: (Set<TimeRange> newSelection) {
                   setState(() {
                     selectedRange = newSelection.first;
-                    // TODO: Load data for new range
                   });
+                  _loadHistoryData();
                 },
                 style: ButtonStyle(visualDensity: VisualDensity.comfortable),
               ),
@@ -220,7 +448,15 @@ class _StatsPageState extends State<StatsPage> {
               const SizedBox(height: 16),
 
               // Temperature Chart
-              const ChartPlaceholder(title: 'Biểu đồ nhiệt độ', height: 220),
+              if (isLoading)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(40.0),
+                    child: CircularProgressIndicator(),
+                  ),
+                )
+              else
+                TemperatureChart(temperatureData: temperatureData),
 
               const SizedBox(height: 32),
 
@@ -237,7 +473,15 @@ class _StatsPageState extends State<StatsPage> {
               const SizedBox(height: 16),
 
               // Humidity Chart
-              const ChartPlaceholder(title: 'Biểu đồ độ ẩm', height: 220),
+              if (isLoading)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(40.0),
+                    child: CircularProgressIndicator(),
+                  ),
+                )
+              else
+                HumidityChart(humidityData: humidityData),
 
               const SizedBox(height: 32),
 
@@ -254,7 +498,15 @@ class _StatsPageState extends State<StatsPage> {
               const SizedBox(height: 16),
 
               // Gas Chart
-              const ChartPlaceholder(title: 'Biểu đồ khí Gas', height: 220),
+              if (isLoading)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(40.0),
+                    child: CircularProgressIndicator(),
+                  ),
+                )
+              else
+                GasChart(gasData: gasData, threshold: 200),
 
               const SizedBox(height: 24),
             ],

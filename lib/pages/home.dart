@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import '../widgets/sensor_card.dart';
 import '../widgets/warning_banner.dart';
-import '../widgets/switch_tile.dart';
 import '../services/firebase_realtime.dart';
 import '../utils/dialog_helper.dart';
 
@@ -28,8 +27,6 @@ class _HomePageState extends State<HomePage> {
   bool isEsp32Online = false;
 
   // Control data
-  bool relay1State = false;
-  bool relay2State = false;
   bool buzzerState = false;
 
   // Settings
@@ -41,7 +38,53 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    _loadInitialData();
     _listenToFirebase();
+  }
+
+  // Load giá trị thực từ Firebase khi khởi động
+  Future<void> _loadInitialData() async {
+    try {
+      // Lấy trạng thái control hiện tại
+      final controlData = await _firebaseService.getCurrentControlState();
+
+      // Lấy dữ liệu sensor hiện tại
+      final sensorData = await _firebaseService.getCurrentSensorData();
+
+      if (mounted) {
+        setState(() {
+          // Cập nhật control state
+          _updateControlState(controlData);
+
+          // Cập nhật sensor data
+          gasLevel = (sensorData['mq2'] ?? 0).toDouble();
+          hasFlame = (sensorData['fire'] ?? 0) == 1;
+          temperature = (sensorData['temp'] ?? 0).toDouble();
+          humidity = (sensorData['humi'] ?? 0).toDouble();
+          lastUpdateTime = DateTime.now();
+          isEsp32Online = true;
+        });
+      }
+
+      print('Initial data loaded - Control: $controlData, Sensor: $sensorData');
+    } catch (e) {
+      print('Error loading initial data: $e');
+    }
+  }
+
+  // Helper method để cập nhật control state
+  void _updateControlState(Map<String, dynamic> data) {
+    // Xử lý buzzer
+    var buzzerValue = data['buzzer'];
+    if (buzzerValue is bool) {
+      buzzerState = buzzerValue;
+    } else if (buzzerValue is int) {
+      buzzerState = buzzerValue == 1;
+    } else if (buzzerValue is String) {
+      buzzerState = buzzerValue == '1' || buzzerValue.toLowerCase() == 'true';
+    } else {
+      buzzerState = false;
+    }
   }
 
   @override
@@ -65,6 +108,12 @@ class _HomePageState extends State<HomePage> {
 
           // Check if device is online (data updated recently)
           isEsp32Online = true;
+
+          // Debug log
+          print('Sensor data received: $data');
+          print(
+            'Gas: $gasLevel, Flame: $hasFlame, Temp: $temperature, Humi: $humidity',
+          );
         });
       }
     });
@@ -73,9 +122,11 @@ class _HomePageState extends State<HomePage> {
     _controlSubscription = _firebaseService.getControlStream().listen((data) {
       if (mounted) {
         setState(() {
-          relay1State = (data['relay1'] ?? 0) == 1;
-          relay2State = (data['relay2'] ?? 0) == 1;
-          buzzerState = (data['buzzer'] ?? 0) == 1;
+          _updateControlState(data);
+
+          // Debug log
+          print('Control data received: $data');
+          print('Buzzer: $buzzerState');
         });
       }
     });
@@ -116,21 +167,6 @@ class _HomePageState extends State<HomePage> {
     return Colors.red;
   }
 
-  Future<void> _toggleRelay(int relayNumber, bool newState) async {
-    try {
-      await _firebaseService.updateControl(
-        'relay$relayNumber',
-        newState ? 1 : 0,
-      );
-      DialogHelper.showSuccess(
-        context,
-        'Đã ${newState ? 'bật' : 'tắt'} Relay $relayNumber',
-      );
-    } catch (e) {
-      DialogHelper.showError(context, 'Lỗi: $e');
-    }
-  }
-
   Future<void> _toggleBuzzer() async {
     try {
       await _firebaseService.updateControl('buzzer', 0);
@@ -148,7 +184,6 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Trang chủ'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 16.0),
@@ -173,9 +208,8 @@ class _HomePageState extends State<HomePage> {
       ),
       body: RefreshIndicator(
         onRefresh: () async {
-          // TODO: Refresh data from Firebase
-          await Future.delayed(const Duration(seconds: 1));
-          setState(() {});
+          // Refresh data from Firebase
+          await _loadInitialData();
         },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -200,12 +234,22 @@ class _HomePageState extends State<HomePage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Section: Trạng thái cảm biến
-                    const Text(
-                      'Trạng thái cảm biến',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.sensors,
+                          color: Colors.blue.shade700,
+                          size: 24,
+                        ),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Trạng thái cảm biến',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 16),
 
@@ -216,7 +260,7 @@ class _HomePageState extends State<HomePage> {
                       physics: const NeverScrollableScrollPhysics(),
                       mainAxisSpacing: 12,
                       crossAxisSpacing: 12,
-                      childAspectRatio: 1.3,
+                      childAspectRatio: 1.25,
                       children: [
                         SensorCard(
                           title: 'Khí Gas',
@@ -245,70 +289,57 @@ class _HomePageState extends State<HomePage> {
                       ],
                     ),
 
-                    const SizedBox(height: 32),
-
-                    // Section: Điều khiển
-                    const Text(
-                      'Điều khiển thiết bị',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Control Switches
-                    Card(
-                      child: Column(
-                        children: [
-                          SwitchTile(
-                            title: 'Relay 1',
-                            subtitle: relay1State ? 'Đang bật' : 'Đang tắt',
-                            value: relay1State,
-                            icon: Icons.power,
-                            onChanged: (value) {
-                              _toggleRelay(1, value);
-                            },
-                          ),
-                          const Divider(height: 1),
-                          SwitchTile(
-                            title: 'Relay 2',
-                            subtitle: relay2State ? 'Đang bật' : 'Đang tắt',
-                            value: relay2State,
-                            icon: Icons.power_settings_new,
-                            onChanged: (value) {
-                              _toggleRelay(2, value);
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 24),
 
                     // Alarm Control
                     if (hasWarning)
-                      SizedBox(
+                      Container(
                         width: double.infinity,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          gradient: LinearGradient(
+                            colors: alarmMuted
+                                ? [Colors.grey.shade300, Colors.grey.shade400]
+                                : [
+                                    Colors.orange.shade400,
+                                    Colors.orange.shade600,
+                                  ],
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: (alarmMuted ? Colors.grey : Colors.orange)
+                                  .withOpacity(0.3),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
                         child: ElevatedButton.icon(
                           onPressed: alarmMuted ? null : _toggleBuzzer,
                           icon: Icon(
                             alarmMuted ? Icons.volume_off : Icons.volume_up,
+                            size: 24,
                           ),
                           label: Text(
                             alarmMuted ? 'Còi đã tắt' : 'Tắt còi cảnh báo',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: alarmMuted
-                                ? Colors.grey
-                                : Colors.orange,
+                            backgroundColor: Colors.transparent,
                             foregroundColor: Colors.white,
+                            shadowColor: Colors.transparent,
                             padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
                           ),
                         ),
                       ),
 
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 24),
                   ],
                 ),
               ),

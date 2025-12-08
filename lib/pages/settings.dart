@@ -17,6 +17,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   StreamSubscription? _settingsSubscription;
   StreamSubscription? _wifiSubscription;
+  StreamSubscription? _sensorSubscription;
 
   String deviceId = 'ESP32-001';
   bool isDeviceOnline = false;
@@ -28,11 +29,17 @@ class _SettingsPageState extends State<SettingsPage> {
   double gasThreshold = 1000.0;
   int dataInterval = 5;
 
-  // Sensors - giả định có tất cả
-  bool hasTempSensor = true;
-  bool hasHumiditySensor = true;
-  bool hasGasSensor = true;
-  bool hasFlameSensor = true;
+  // Sensors - phát hiện từ Firebase data
+  bool hasTempSensor = false;
+  bool hasHumiditySensor = false;
+  bool hasGasSensor = false;
+  bool hasFlameSensor = false;
+
+  // Giá trị sensor hiện tại
+  double currentTemp = 0;
+  double currentHumi = 0;
+  double currentGas = 0;
+  int currentFire = 1;
 
   @override
   void initState() {
@@ -44,6 +51,7 @@ class _SettingsPageState extends State<SettingsPage> {
   void dispose() {
     _settingsSubscription?.cancel();
     _wifiSubscription?.cancel();
+    _sensorSubscription?.cancel();
     super.dispose();
   }
 
@@ -61,8 +69,6 @@ class _SettingsPageState extends State<SettingsPage> {
               0,
               5000,
             );
-
-            // Check for buzzer/relay enable states
           }
 
           dataInterval = data['dataInterval'] ?? 5;
@@ -89,6 +95,31 @@ class _SettingsPageState extends State<SettingsPage> {
             isDeviceOnline =
                 DateTime.now().difference(wifiTimestamp!).inSeconds < 30;
           }
+        });
+      }
+    });
+
+    // Listen to sensor data để phát hiện sensor đang hoạt động
+    _sensorSubscription = _firebaseService.getSensorStream().listen((data) {
+      if (mounted) {
+        setState(() {
+          currentTemp = (data['temp'] ?? 0).toDouble();
+          currentHumi = (data['humi'] ?? 0).toDouble();
+          currentGas = (data['mq2'] ?? 0).toDouble();
+          currentFire = data['fire'] ?? 1;
+
+          // Phát hiện sensor dựa trên data hợp lệ
+          // Nhiệt độ: >= -40 và <= 80 (phạm vi DHT22)
+          hasTempSensor = currentTemp >= -40 && currentTemp <= 80;
+
+          // Độ ẩm: >= 0 và <= 100
+          hasHumiditySensor = currentHumi >= 0 && currentHumi <= 100;
+
+          // Gas: >= 0 (MQ-2 luôn có giá trị >= 0)
+          hasGasSensor = currentGas >= 0;
+
+          // Fire sensor: 0 hoặc 1
+          hasFlameSensor = currentFire == 0 || currentFire == 1;
         });
       }
     });
@@ -231,10 +262,7 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Cài đặt'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-      ),
+      appBar: AppBar(title: const Text('Cài đặt')),
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -565,13 +593,73 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _buildSensorChip(String label) {
+    // L\u1ea5y gi\u00e1 tr\u1ecb th\u1ef1c t\u1ebf t\u1eeb sensor
+    String value = '';
+    IconData icon = Icons.check_circle;
+    Color chipColor = Colors.green;
+
+    switch (label) {
+      case 'Nhi\u1ec7t \u0111\u1ed9':
+        value = '${currentTemp.toStringAsFixed(1)}\u00b0C';
+        icon = Icons.thermostat;
+        chipColor = currentTemp >= -40 && currentTemp <= 80
+            ? Colors.blue
+            : Colors.grey;
+        break;
+      case '\u0110\u1ed9 \u1ea9m':
+        value = '${currentHumi.toInt()}%';
+        icon = Icons.water_drop;
+        chipColor = currentHumi >= 0 && currentHumi <= 100
+            ? Colors.cyan
+            : Colors.grey;
+        break;
+      case 'Gas':
+        value = '${currentGas.toInt()} ppm';
+        icon = Icons.air;
+        chipColor = currentGas >= 0 ? Colors.green : Colors.grey;
+        break;
+      case 'L\u1eeda':
+        value = currentFire == 0 ? 'C\u00f3' : 'Kh\u00f4ng';
+        icon = currentFire == 0 ? Icons.whatshot : Icons.check_circle;
+        chipColor = currentFire == 0 ? Colors.red : Colors.green;
+        break;
+    }
+
+    // Xác định màu sắc cho chip
+    Color backgroundColor;
+    Color textColor;
+
+    if (chipColor == Colors.blue) {
+      backgroundColor = Colors.blue.shade50;
+      textColor = Colors.blue.shade700;
+    } else if (chipColor == Colors.cyan) {
+      backgroundColor = Colors.cyan.shade50;
+      textColor = Colors.cyan.shade700;
+    } else if (chipColor == Colors.green) {
+      backgroundColor = Colors.green.shade50;
+      textColor = Colors.green.shade700;
+    } else if (chipColor == Colors.red) {
+      backgroundColor = Colors.red.shade50;
+      textColor = Colors.red.shade700;
+    } else {
+      backgroundColor = Colors.grey.shade50;
+      textColor = Colors.grey.shade700;
+    }
+
     return Chip(
-      label: Text(label),
-      avatar: const Icon(Icons.check_circle, size: 16),
-      backgroundColor: Colors.green.shade50,
-      labelStyle: const TextStyle(
+      label: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label),
+          const SizedBox(width: 4),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
+        ],
+      ),
+      avatar: Icon(icon, size: 16, color: textColor),
+      backgroundColor: backgroundColor,
+      labelStyle: TextStyle(
         fontSize: 12,
-        color: Colors.green,
+        color: textColor,
         fontWeight: FontWeight.w500,
       ),
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),

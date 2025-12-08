@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
 import 'pages/home.dart';
 import 'pages/stats.dart';
@@ -13,9 +14,19 @@ void main() async {
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // Set database URL
   FirebaseDatabase.instance.databaseURL =
       "https://sonxemay-cantho-default-rtdb.asia-southeast1.firebasedatabase.app";
+
+  // Đăng nhập ẩn danh để có quyền truy cập Firebase
+  try {
+    final auth = FirebaseAuth.instance;
+    if (auth.currentUser == null) {
+      await auth.signInAnonymously();
+      print('✅ Đăng nhập Firebase thành công (Anonymous)');
+    }
+  } catch (e) {
+    print('❌ Lỗi đăng nhập Firebase: $e');
+  }
 
   runApp(const MyApp());
 }
@@ -39,8 +50,25 @@ class MyApp extends StatelessWidget {
       ],
       locale: const Locale('vi', 'VN'),
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.blue,
+          brightness: Brightness.light,
+        ),
         useMaterial3: true,
+        scaffoldBackgroundColor: const Color(0xFFF5F7FA),
+        cardTheme: const CardThemeData(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(16)),
+          ),
+          color: Colors.white,
+        ),
+        appBarTheme: const AppBarTheme(
+          elevation: 0,
+          centerTitle: true,
+          backgroundColor: Color(0xFF1E88E5),
+          foregroundColor: Colors.white,
+        ),
       ),
       home: const MainNavigation(),
     );
